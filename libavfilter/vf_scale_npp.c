@@ -572,22 +572,43 @@ static int init_processing_chain(AVFilterContext *ctx, int in_width, int in_heig
         out_deinterleaved_format == AV_PIX_FMT_NONE)
         return AVERROR_BUG;
 
-    /* figure out which stages need to be done */
-    if (in_width != out_width || in_height != out_height ||
-        in_deinterleaved_format != out_deinterleaved_format) {
-        s->stages[STAGE_RESIZE].stage_needed = 1;
+// Figure out which stages need to be done.
+	if (
+	in_width != out_width ||
+	in_height != out_height ||
+	in_deinterleaved_format != out_deinterleaved_format
+	) {
+// ---- BEGIN (1)
+	s->stages[STAGE_RESIZE].stage_needed = 1;
+	if ( s->interp_algo == NPPI_INTER_SUPER ) {
+/*
+	Fallback:
+	Lanczos for up-scaling, Cubic (Bicubic) for down.
 
-        if (s->interp_algo == NPPI_INTER_SUPER &&
-            (out_width > in_width && out_height > in_height)) {
-            s->interp_algo = NPPI_INTER_LANCZOS;
-            av_log(ctx, AV_LOG_WARNING, "super-sampling not supported for output dimensions, using lanczos instead.\n");
-        }
-        if (s->interp_algo == NPPI_INTER_SUPER &&
-            !(out_width < in_width && out_height < in_height)) {
-            s->interp_algo = NPPI_INTER_CUBIC;
-            av_log(ctx, AV_LOG_WARNING, "super-sampling not supported for output dimensions, using cubic instead.\n");
-        }
-    }
+	Caveat:
+	It's valid for up-scaling horizontally, down (or no change) vertically. (vice versa)
+	Which doesn't appear to be handled there.
+
+	Proposed fix:
+	Up-scaling first with Lanczos, then down (or just pass-through) with Cubic.
+*/
+	if (
+	out_width > in_width &&
+	out_height > in_height
+	) {
+	s->interp_algo = NPPI_INTER_LANCZOS;
+	av_log( ctx, AV_LOG_WARNING,
+	"Super-Sampling unsupported for output dimension: using Lanczos instead." "\n" );
+
+	} else {
+	s->interp_algo = NPPI_INTER_CUBIC;
+	av_log( ctx, AV_LOG_WARNING,
+	"Super-Sampling unsupported for output dimension: using Cubic instead." "\n" );
+	};
+
+	};
+// ---- END (1)
+	};
 
     if (!s->stages[STAGE_RESIZE].stage_needed && in_format == out_format)
         s->passthrough = 1;
